@@ -4,42 +4,13 @@ Unified Prompt Templates
 This module contains prompt templates for the SPAgent system.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 
 
-def create_system_prompt(tools: List[Dict[str, Any]]) -> str:
-    """
-    Create system prompt with available tools
-    
-    Args:
-        tools: List of tool function schemas
-        
-    Returns:
-        System prompt string
-    """
-    if not tools:
-        return """You are a helpful assistant that can analyze images and answer questions."""
-    
-    tools_json = json.dumps(tools, indent=2)
-    
-    return f"""You are a helpful assistant that can analyze images and answer questions.
+# ─── Reusable workflow instruction blocks ────────────────────────────────────
 
-# Tools
-You have access to the following tools to assist with user queries:
-<tools>
-{tools_json}
-</tools>
-
-# How to call a tool
-When you need to use a tool, return a JSON object with the function name and arguments within <tool_call></tool_call> XML tags:
-<tool_call>
-{{"name": "<function-name>", "arguments": {{"param1": "value1", "param2": "value2"}}}}
-</tool_call>
-
-You can call multiple tools if needed by using multiple <tool_call> blocks.
-
-# Multi-Step Workflow
+SPATIAL_3D_WORKFLOW = """# Multi-Step Workflow
 You can perform MULTIPLE rounds of tool calls and analysis. When using 3D reconstruction tools (Pi3), autonomously explore viewpoints:
 
 **IMPORTANT: The input image(s) already show the scene at (azimuth=0°, elevation=0°) viewpoint. DO NOT call Pi3 tools with (0°, 0°) as it will just return the same view you already have!
@@ -69,7 +40,92 @@ You can examine the image to understand what is around cam1.
 The 3D reconstruction provides relative positional information, so you should reason interactively and complementarily between the 2D image and the 3D reconstruction to form a complete understanding.
 You need to analyze deeply the camera, its orientation, and the content captured in the frame.
 
-TIPS: For questions related to orientation or relative positioning, it is recommended to choose top view.
+TIPS: For questions related to orientation or relative positioning, it is recommended to choose top view."""
+
+GENERAL_VISION_WORKFLOW = """# Multi-Step Workflow
+You can perform MULTIPLE rounds of tool calls and analysis to thoroughly understand the image.
+
+Workflow:
+1. Carefully analyze the image(s) and the question
+2. Decide which tools would help gather additional information
+3. Call tools with appropriate parameters — you may call the same tool multiple times with different inputs
+4. After each tool result, assess whether you need more information before answering
+5. Continue until you have sufficient evidence to answer confidently
+6. Only put number (like 1,2,3) or Options in <answer></answer> tags, do not put any other text."""
+
+# ─── Full system prompt templates (with {tools_json} placeholder) ─────────────
+
+SPATIAL_3D_SYSTEM_PROMPT = (
+    "You are a helpful assistant that can analyze images and answer questions.\n\n"
+    "# Tools\n"
+    "You have access to the following tools to assist with user queries:\n"
+    "<tools>\n"
+    "{tools_json}\n"
+    "</tools>\n\n"
+    "# How to call a tool\n"
+    "When you need to use a tool, return a JSON object with the function name and arguments "
+    "within <tool_call></tool_call> XML tags:\n"
+    "<tool_call>\n"
+    '{"name": "<function-name>", "arguments": {"param1": "value1", "param2": "value2"}}\n'
+    "</tool_call>\n\n"
+    "You can call multiple tools if needed by using multiple <tool_call> blocks.\n\n"
+    + SPATIAL_3D_WORKFLOW
+)
+
+GENERAL_VISION_SYSTEM_PROMPT = (
+    "You are a helpful visual assistant that can analyze images and answer questions.\n\n"
+    "# Tools\n"
+    "You have access to the following tools to assist with your analysis:\n"
+    "<tools>\n"
+    "{tools_json}\n"
+    "</tools>\n\n"
+    "# How to call a tool\n"
+    "When you need to use a tool, return a JSON object with the function name and arguments "
+    "within <tool_call></tool_call> XML tags:\n"
+    "<tool_call>\n"
+    '{"name": "<function-name>", "arguments": {"param1": "value1", "param2": "value2"}}\n'
+    "</tool_call>\n\n"
+    "You can call multiple tools if needed by using multiple <tool_call> blocks.\n\n"
+    + GENERAL_VISION_WORKFLOW
+)
+
+
+def create_system_prompt(tools: List[Dict[str, Any]], workflow: Optional[str] = None) -> str:
+    """
+    Create system prompt with available tools.
+
+    Args:
+        tools: List of tool function schemas
+        workflow: Optional workflow instruction block to override the default
+                  3D spatial workflow. Use one of the SPATIAL_3D_WORKFLOW or
+                  GENERAL_VISION_WORKFLOW constants, or supply your own string.
+
+    Returns:
+        System prompt string
+    """
+    if not tools:
+        return "You are a helpful assistant that can analyze images and answer questions."
+
+    tools_json = json.dumps(tools, indent=2)
+    chosen_workflow = workflow if workflow is not None else SPATIAL_3D_WORKFLOW
+
+    return f"""You are a helpful assistant that can analyze images and answer questions.
+
+# Tools
+You have access to the following tools to assist with user queries:
+<tools>
+{tools_json}
+</tools>
+
+# How to call a tool
+When you need to use a tool, return a JSON object with the function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>
+{{"name": "<function-name>", "arguments": {{"param1": "value1", "param2": "value2"}}}}
+</tool_call>
+
+You can call multiple tools if needed by using multiple <tool_call> blocks.
+
+{chosen_workflow}
 """
 
 
