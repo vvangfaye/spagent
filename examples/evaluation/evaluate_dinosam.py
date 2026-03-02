@@ -14,7 +14,8 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
 from spagent import SPAgent
-from spagent.core import DataCollector  # NEW: Import DataCollector
+from spagent.core import DataCollector
+from spagent.core.prompts import GENERAL_VISION_SYSTEM_PROMPT
 from spagent.models import GPTModel, QwenModel
 from spagent.tools import (
     SegmentationTool,
@@ -110,7 +111,8 @@ def main():
             max_samples=args.max_samples,
             max_workers=args.max_workers,
             max_iterations=args.max_iterations,
-            data_collector=data_collector  # NEW: Pass DataCollector
+            data_collector=data_collector,
+            system_prompt=GENERAL_VISION_SYSTEM_PROMPT,
         )
         all_results[config_name] = results
         

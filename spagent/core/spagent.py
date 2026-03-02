@@ -16,6 +16,7 @@ from pathlib import Path
 from .tool import Tool, ToolRegistry
 from .model import Model
 from .prompts import create_system_prompt, create_follow_up_prompt, create_user_prompt, create_fallback_prompt
+import json as _json
 from .data_collector import DataCollector
 
 logger = logging.getLogger(__name__)
@@ -34,21 +35,32 @@ class SPAgent:
         model: Model,
         tools: Optional[List[Tool]] = None,
         max_workers: int = 4,
-        data_collector: Optional[DataCollector] = None
+        data_collector: Optional[DataCollector] = None,
+        system_prompt: Optional[str] = None,
     ):
         """
         Initialize SPAgent
-        
+
         Args:
             model: VLLM model wrapper to use
             tools: List of external expert tools (optional)
             max_workers: Maximum number of parallel tool executions
             data_collector: Optional DataCollector for training data collection
+            system_prompt: Optional system prompt template string.
+                If provided it overrides the default 3D-spatial prompt built by
+                ``create_system_prompt``.  The string may contain a
+                ``{tools_json}`` placeholder which will be replaced with the
+                JSON-serialised tool schemas at inference time.  If no
+                placeholder is present the tools block is appended automatically.
+                Use the ``SPATIAL_3D_SYSTEM_PROMPT`` or
+                ``GENERAL_VISION_SYSTEM_PROMPT`` constants from
+                ``spagent.core.prompts`` as starting points.
         """
         self.model = model
         self.tool_registry = ToolRegistry()
         self.max_workers = max_workers
         self.data_collector = data_collector
+        self.system_prompt_template = system_prompt
         
         # Register provided tools
         if tools:
@@ -148,7 +160,19 @@ class SPAgent:
         
         # Create system prompt with available tools
         tool_schemas = self.tool_registry.get_function_schemas()
-        system_prompt = create_system_prompt(tool_schemas)
+        if self.system_prompt_template is not None:
+            tools_json = _json.dumps(tool_schemas, indent=2)
+            if "{tools_json}" in self.system_prompt_template:
+                system_prompt = self.system_prompt_template.replace("{tools_json}", tools_json)
+            else:
+                # No placeholder — append the tools block automatically
+                tools_block = (
+                    f"\n# Tools\nYou have access to the following tools:\n"
+                    f"<tools>\n{tools_json}\n</tools>\n"
+                )
+                system_prompt = self.system_prompt_template + tools_block
+        else:
+            system_prompt = create_system_prompt(tool_schemas)
         # system_prompt += '\nThis time, you need to call the function anyway in <tool_call></tool_call> format.' # Debug Only!
         user_prompt = create_user_prompt(question, image_paths, tool_schemas)
         

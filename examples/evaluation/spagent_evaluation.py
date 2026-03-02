@@ -483,7 +483,8 @@ def evaluate_tool_config(
     max_samples: int = None,
     max_workers: int = 4,
     max_iterations: int = 3,
-    data_collector=None  # NEW: Optional DataCollector
+    data_collector=None,
+    system_prompt: str = None,
 ) -> Dict[str, Any]:
     """Evaluate a specific tool configuration
     
@@ -496,7 +497,11 @@ def evaluate_tool_config(
         max_samples: Maximum number of samples to evaluate
         max_workers: Maximum number of parallel workers
         max_iterations: Maximum number of tool-call iterations
-        
+        data_collector: Optional DataCollector for training data collection
+        system_prompt: Optional system prompt template string passed to SPAgent.
+                       May contain a {tools_json} placeholder. Defaults to the
+                       built-in 3D spatial prompt when None.
+
     Returns:
         Evaluation results dictionary
     """
@@ -513,7 +518,8 @@ def evaluate_tool_config(
         model=GPTModel(model_name=model),
         tools=tools,
         max_workers=max_workers,
-        data_collector=data_collector  # NEW: Pass DataCollector
+        data_collector=data_collector,
+        system_prompt=system_prompt,
     )
     
     print(f"Evaluating {len(data)} samples with {model}")
