@@ -796,20 +796,30 @@ def _render_point_cloud_sfm(points_world, colors, camera_poses, ref_cam_idx,
         buf.close()
         return img_b64
 
-    # Z-buffer: sort far-to-near so closer points overwrite farther ones
-    sort_idx = np.argsort(-z_valid)
-    u_int = u_int[sort_idx]
-    v_int = v_int[sort_idx]
-    colors_proj = colors_proj[sort_idx]
-
     image = np.ones((output_height, output_width, 3), dtype=np.float32)
+    depth_buf = np.full((output_height, output_width), np.inf, dtype=np.float32)
 
-    # Splat each point to a 3x3 neighborhood for denser coverage
+    # Splat each point to a 3x3 neighborhood for denser coverage.
+    # Use an explicit depth buffer so nearer points always win, even when
+    # splat neighbourhoods of different points overlap across loop iterations.
     for dy in range(-1, 2):
         for dx in range(-1, 2):
             uu = np.clip(u_int + dx, 0, output_width - 1)
             vv = np.clip(v_int + dy, 0, output_height - 1)
-            image[vv, uu] = colors_proj
+            lin = vv * output_width + uu
+            order = np.argsort(z_valid)
+            lin_o = lin[order]
+            z_o = z_valid[order]
+            c_o = colors_proj[order]
+            _, first = np.unique(lin_o, return_index=True)
+            lin_u = lin_o[first]
+            z_u = z_o[first]
+            c_u = c_o[first]
+            vv_u = lin_u // output_width
+            uu_u = lin_u % output_width
+            closer = z_u < depth_buf[vv_u, uu_u]
+            depth_buf[vv_u[closer], uu_u[closer]] = z_u[closer]
+            image[vv_u[closer], uu_u[closer]] = c_u[closer]
 
     image_uint8 = (np.clip(image, 0, 1) * 255).astype(np.uint8)
 

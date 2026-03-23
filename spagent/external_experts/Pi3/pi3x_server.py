@@ -363,7 +363,8 @@ def infer():
         # 新增：选择用于旋转参考的相机索引（1-based，默认1）
         rotation_reference_camera = data.get('rotation_reference_camera', 1)
         # 新增：是否使用相机视角模式（而非全局视角）
-        camera_view = data.get('camera_view', False)
+        # camera_view = data.get('camera_view', False)
+        camera_view = True
 
         # 获取文件名信息（可选）
         image_names = data.get('image_names', [])  # 图片文件名列表
@@ -842,20 +843,35 @@ def _render_point_cloud_sfm(points_world, colors, camera_poses, ref_cam_idx,
         buf.close()
         return img_b64
 
-    # Z-buffer: sort far-to-near so closer points overwrite farther ones
-    sort_idx = np.argsort(-z_valid)
-    u_int = u_int[sort_idx]
-    v_int = v_int[sort_idx]
-    colors_proj = colors_proj[sort_idx]
-
     image = np.ones((output_height, output_width, 3), dtype=np.float32)
+    # depth_buf stores the minimum (nearest) z written to each pixel so far
+    depth_buf = np.full((output_height, output_width), np.inf, dtype=np.float32)
 
-    # Splat each point to a 3x3 neighborhood for denser coverage
+    # Splat each point to a 3x3 neighborhood for denser coverage.
+    # For each candidate write we only update a pixel when the incoming point
+    # is strictly closer than whatever is already there, so the depth ordering
+    # is correct even when splat neighbourhoods of different points overlap.
     for dy in range(-1, 2):
         for dx in range(-1, 2):
             uu = np.clip(u_int + dx, 0, output_width - 1)
             vv = np.clip(v_int + dy, 0, output_height - 1)
-            image[vv, uu] = colors_proj
+            lin = vv * output_width + uu          # flat pixel index
+            # Among duplicate flat indices in this iteration keep the nearest
+            order = np.argsort(z_valid)           # near-to-far within this pass
+            lin_o = lin[order]
+            z_o = z_valid[order]
+            c_o = colors_proj[order]
+            # np.unique on a sorted array returns the FIRST occurrence, which
+            # is the nearest point for each pixel after the near-to-far sort.
+            _, first = np.unique(lin_o, return_index=True)
+            lin_u = lin_o[first]
+            z_u = z_o[first]
+            c_u = c_o[first]
+            vv_u = lin_u // output_width
+            uu_u = lin_u % output_width
+            closer = z_u < depth_buf[vv_u, uu_u]
+            depth_buf[vv_u[closer], uu_u[closer]] = z_u[closer]
+            image[vv_u[closer], uu_u[closer]] = c_u[closer]
 
     image_uint8 = (np.clip(image, 0, 1) * 255).astype(np.uint8)
 
