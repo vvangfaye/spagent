@@ -846,10 +846,7 @@ def _create_view_image(points_sample, colors_sample, camera_centers, camera_pose
         )
 
     # 以下为全局视角模式的matplotlib渲染
-    if False:
-        pass
-    else:
-        view_cam_pose = camera_poses[cam_idx]
+    view_cam_pose = camera_poses[cam_idx]
     
     if view_cam_pose.shape == (4, 4):
         R_cw = view_cam_pose[:3, :3]
